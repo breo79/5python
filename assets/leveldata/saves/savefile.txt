@@ -1,0 +1,6 @@
+BeatenLevels 1;
+BeatenLVLSnoWt 2,3,4,5,6
+Unbeaten 7
+WinTokenAmount 1
+TimeSpentPlaying 35.3
+00000

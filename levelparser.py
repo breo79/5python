@@ -1,7 +1,19 @@
+import re
 from pathlib import Path
 import blockproperties
 import backgroundproperties
 
+
+DIALOGUE_LINE = re.compile(r"^(\d{2})([A-Z]) ?(.*)$")
+
+
+def parse_dialogue(dialogue_lines):
+    parsed = []
+    for line in dialogue_lines:
+        match = DIALOGUE_LINE.match(line)
+        if match:
+            parsed.append({"speaker": match.group(1), "face": match.group(2), "text": match.group(3).strip()})
+    return parsed
 
 def parse_entities(entity_lines):
     spawns = []
@@ -77,10 +89,10 @@ def parse_level():
             if line.startswith("0000") or line == "000000":
                 i += 1
                 break
-            elif "," in line and not line.endswith("S") and not line.endswith("H"):
-                entities.append(line)
-            elif line.strip():
+            elif DIALOGUE_LINE.match(line):
                 dialogue.append(line)
+            elif "," in line:
+                entities.append(line)
             i += 1
 
         bg_asset = None
@@ -96,7 +108,8 @@ def parse_level():
             "entities": entities,
             "spawns": parse_entities(entities),
             "bg_asset": bg_asset,
-            "dialogue": dialogue
+            "dialogue": dialogue,
+            "lines": parse_dialogue(dialogue)
         })
 
     return valid_levels

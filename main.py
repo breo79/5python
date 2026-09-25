@@ -1,6 +1,9 @@
 import charsprites, charproperties, blockproperties, backgroundproperties
-import pygame, os, sys, time, math, re
+import pygame, os, sys, time, math, re, random
 import levelparser as ps
+import levelselect
+import dialogue
+import savegame
 from pathlib import Path
 import resvg_py
 from io import BytesIO
@@ -86,20 +89,109 @@ svg_rect = svg_surface.get_rect()
 svg_rect.bottomleft = (15, screen_height - 15)
 
 game_state = "main_menu"
+level_select_menu = levelselect.LevelSelectMenu((screen_width, screen_height), load_svg_surface)
+dialogue_box = dialogue.DialogueBox((screen_width, screen_height), load_svg_surface)
 active_hit_button = None
 current_level_index = 0
 current_loaded_level = -1
 running = True
 
 texture_cache = {}
+invisible_refs = set()
+animated_blocks = {}
 for block in blockproperties.block_sprites:
+    if not block.get("blocktexture"):
+        invisible_refs.add(block["referential"])
+        continue
     texture_cache[block["referential"]] = block["blocktexture"]
+    if block.get("blockanimation"):
+        frame_dir = Path(__file__).resolve().parent / block["blockanimation"].lstrip("/")
+        frames = sorted(frame_dir.glob("*.svg")) if frame_dir.is_dir() else []
+        if frames:
+            animated_blocks[block["referential"]] = [
+                block["blockanimation"].rstrip("/") + "/" + frame.name for frame in frames
+            ]
+
+svg_viewbox_cache = {}
+
+def svg_viewbox(path):
+    if path in svg_viewbox_cache:
+        return svg_viewbox_cache[path]
+    full_path = Path(__file__).resolve().parent / path.lstrip("/")
+    with open(full_path, "r", encoding="utf-8") as f:
+        header = f.read(1000)
+    match = re.search(r'viewBox="\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)', header)
+    box = tuple(float(v) for v in match.groups()) if match else (0.0, 0.0, 30.0, 30.0)
+    svg_viewbox_cache[path] = box
+    return box
+
+animation_tick = 0
 
 solid_refs = {
     block["referential"]
     for block in blockproperties.block_sprites
     if block.get("CollisionDataFourSided", "2222") == "1111"
 }
+
+def parse_block_size(block):
+    if "BlockSizeXY" in block:
+        w, h = block["BlockSizeXY"].split(",")
+        return float(w), float(h)
+    size = float(block.get("BlockSize", 1))
+    return size, size
+
+block_sizes = {block["referential"]: parse_block_size(block) for block in blockproperties.block_sprites}
+
+wintoken_refs = {
+    block["referential"]
+    for block in blockproperties.block_sprites
+    if block["blockid"] == "4"
+}
+
+def wintoken_look(ch, col, row):
+    if ch is None:
+        return 255, 0, 0
+    dist = math.hypot(col + 0.5 - ch.x, row + 0.5 - (ch.y - ch.height / 2.0))
+    closeness = min(max((WINTOKEN_FADE_FAR - dist) / (WINTOKEN_FADE_FAR - WINTOKEN_FADE_NEAR), 0.0), 1.0)
+    alpha = int(WINTOKEN_MIN_ALPHA + (255 - WINTOKEN_MIN_ALPHA) * closeness)
+    shake = max(0.0, 1.0 - dist / WINTOKEN_SHAKE_RANGE) * WINTOKEN_SHAKE_PX
+    return alpha, random.uniform(-shake, shake), random.uniform(-shake, shake)
+
+dialogue_refs = {
+    block["referential"]
+    for block in blockproperties.block_sprites
+    if block["blockid"] == "6"
+}
+
+door_refs = {
+    block["referential"]
+    for block in blockproperties.block_sprites
+    if block["blockid"] == "7"
+}
+
+def block_rect(char, col, row):
+    w, h = block_sizes.get(char, (1.0, 1.0))
+    return (col + 1 - w, row + 1 - h, w, h)
+
+def touching_tiles(ch, grid, refs):
+    left = ch.x - ch.width / 2.0
+    right = ch.x + ch.width / 2.0
+    top = ch.y - ch.height
+    bottom = ch.y
+    hits = []
+    for r_idx, row in enumerate(grid):
+        for c_idx, char in enumerate(row):
+            if char in refs:
+                dx, dy, dw, dh = block_rect(char, c_idx, r_idx)
+                if left < dx + dw and right > dx and top < dy + dh and bottom > dy:
+                    hits.append((c_idx, r_idx))
+    return hits
+
+def touches_door(ch, grid):
+    return bool(touching_tiles(ch, grid, door_refs))
+
+def level_has_wintoken(grid):
+    return any(char in wintoken_refs for row in grid for char in row)
 
 loaded_tile_surfaces = {}
 loaded_bg_surfaces = {}
@@ -124,7 +216,7 @@ class CharacterEntity:
         self.stand_height_svg = max(hip[1] for hip in self.hips) + charsprites.LEG_LENGTH
 
         self.width_px = float(self.props.get("width", 28)) * 2.0
-        self.height_px = self.stand_height_svg * self.part_scale
+        self.height_px = self.stand_height_svg * self.part_scale - float(self.props.get("HitboxTrim", 0))
         self.width = self.width_px / 30.0
         self.height = self.height_px / 30.0
 
@@ -368,6 +460,39 @@ def draw_character(target, ch, foot_x, foot_y, char_scale):
     target.blit(canvas, (foot_x - foot_canvas_x, foot_y - foot_canvas_y))
 
 PLAYER_CHARID = "1"
+DOOR_DELAY_FRAMES = 60
+FLASH_FRAMES = 21
+flash_timer = 0
+WINTOKEN_FADE_NEAR = 2.0
+WINTOKEN_FADE_FAR = 10.0
+WINTOKEN_MIN_ALPHA = 40
+WINTOKEN_SHAKE_RANGE = 4.0
+WINTOKEN_SHAKE_PX = 2.0
+door_timer = None
+dialogue_triggered = False
+collected_tokens = set()
+level_progress = {0: "reached"}
+time_spent = 0.0
+session_active = False
+save_available = savegame.has_save()
+
+def main_menu_buttons():
+    if not save_available:
+        return main_menubuttons
+    buttons = list(main_menubuttons)
+    buttons.insert(buttons.index("NEW GAME") + 1, "CONTINUE GAME")
+    return buttons
+
+def save_progress():
+    if session_active:
+        savegame.write_save(level_progress, time_spent)
+VIEW_COLS = 32
+VIEW_ROWS = 18
+
+def camera_offset(focus, map_size, view_size):
+    if map_size <= view_size:
+        return (view_size - map_size) / 2
+    return -min(max(focus - view_size / 2, 0.0), map_size - view_size)
 level_characters = []
 active_character = None
 
@@ -382,7 +507,7 @@ while running:
     button_spacing = 8
 
     if game_state == "main_menu":
-        current_buttons = main_menubuttons
+        current_buttons = main_menu_buttons()
     elif game_state == "settings":
         current_buttons = settings_buttons
     else:
@@ -396,7 +521,16 @@ while running:
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            save_progress()
             running = False
+        elif game_state == "level_select":
+            action = level_select_menu.handle_event(event, len(parsed_levels), level_progress)
+            if action == ("button", "BACK"):
+                game_state = "main_menu"
+            elif action and action[0] == "level":
+                game_state = "playing"
+                current_level_index = action[1]
+                current_loaded_level = -1
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 active_hit_button = None
@@ -430,9 +564,22 @@ while running:
                                     game_state = "settings"
                                 elif text == "NEW GAME":
                                     if parsed_levels:
-                                        game_state = "playing"
+                                        level_progress = {0: "reached"}
+                                        time_spent = 0.0
                                         current_level_index = 0
-                                        current_loaded_level = -1
+                                        session_active = True
+                                        save_progress()
+                                        save_available = True
+                                        game_state = "level_select"
+                                elif text == "CONTINUE GAME":
+                                    save_data = savegame.load_save()
+                                    if save_data and parsed_levels:
+                                        level_progress = save_data["progress"]
+                                        time_spent = save_data["time_spent"]
+                                        unbeaten = [i for i, state in level_progress.items() if state == "reached" and i < len(parsed_levels)]
+                                        current_level_index = min(unbeaten) if unbeaten else 0
+                                        session_active = True
+                                        game_state = "level_select"
                             elif game_state == "settings":
                                 if text == "BACK":
                                     game_state = "main_menu"
@@ -441,11 +588,19 @@ while running:
         elif event.type == pygame.KEYDOWN:
             if game_state == "playing":
                 if event.key == pygame.K_ESCAPE:
-                    game_state = "main_menu"
+                    save_progress()
+                    game_state = "level_select"
                 elif event.key in (pygame.K_LEFT, pygame.K_RIGHT) and event.mod & pygame.KMOD_CTRL and parsed_levels:
                     step = 1 if event.key == pygame.K_RIGHT else -1
+                    if step == 1 and level_progress.get(current_level_index) != "green":
+                        level_progress[current_level_index] = "yellow"
                     current_level_index = (current_level_index + step) % len(parsed_levels)
+                elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    dialogue_box.advance()
                 elif event.key == pygame.K_r:
+                    collected_tokens = set()
+                    door_timer = None
+                    flash_timer = FLASH_FRAMES
                     for ch in level_characters:
                         ch.reset()
                 elif event.key == pygame.K_TAB:
@@ -500,12 +655,27 @@ while running:
 
             current_y += button_height + button_spacing
 
+    elif game_state == "level_select":
+        level_select_menu.draw(
+            screen,
+            [lvl["title"] for lvl in parsed_levels],
+            level_progress,
+            wt_count=sum(1 for state in level_progress.values() if state == "green"),
+            time_text=savegame.format_time(time_spent)
+        )
+
     elif game_state == "playing":
         if parsed_levels:
             lvl = parsed_levels[current_level_index]
 
             if current_loaded_level != current_level_index:
                 current_loaded_level = current_level_index
+                door_timer = None
+                flash_timer = FLASH_FRAMES
+                collected_tokens = set()
+                dialogue_box.close()
+                dialogue_triggered = False
+                level_progress.setdefault(current_level_index, "reached")
                 level_characters = []
                 for spawn in lvl.get("spawns", []):
                     props = charproperties.get_character_properties(spawn["charid"])
@@ -540,22 +710,45 @@ while running:
             rows = len(grid)
             cols = len(grid[0]) if rows > 0 else 1
 
-            tile_size_x = screen_width / cols
-            tile_size_y = screen_height / rows
-            tile_size = min(tile_size_x, tile_size_y)
+            tile_size = min(screen_width / VIEW_COLS, screen_height / VIEW_ROWS)
 
             map_pixel_width = cols * tile_size
             map_pixel_height = rows * tile_size
-            offset_x = (screen_width - map_pixel_width) / 2
-            offset_y = (screen_height - map_pixel_height) / 2
+            focus_x = active_character.x * tile_size if active_character else 0.0
+            focus_y = (active_character.y - active_character.height / 2.0) * tile_size if active_character else 0.0
+            offset_x = camera_offset(focus_x, map_pixel_width, screen_width)
+            offset_y = camera_offset(focus_y, map_pixel_height, screen_height)
 
+            big_blocks = []
             for r_idx, row in enumerate(grid):
                 for c_idx, char in enumerate(row):
-                    if char == ".":
+                    if char == "." or char in invisible_refs:
+                        continue
+
+                    if char in animated_blocks:
+                        frames = animated_blocks[char]
+                        frame_path = frames[animation_tick % len(frames)]
+                        vx, vy, vw, vh = svg_viewbox(frame_path)
+                        k = tile_size / 30.0
+                        ax = offset_x + c_idx * tile_size + vx * k
+                        ay = offset_y + r_idx * tile_size + vy * k
+                        aw, ah = max(1, int(vw * k)), max(1, int(vh * k))
+                        if ax + aw < 0 or ax > screen_width or ay + ah < 0 or ay > screen_height:
+                            continue
+                        cache_key = (frame_path, aw, ah)
+                        if cache_key not in loaded_tile_surfaces:
+                            loaded_tile_surfaces[cache_key] = load_svg_surface(frame_path, aw, ah)
+                        screen.blit(loaded_tile_surfaces[cache_key], (ax, ay))
+                        continue
+
+                    if block_sizes.get(char, (1.0, 1.0)) != (1.0, 1.0):
+                        big_blocks.append((char, c_idx, r_idx))
                         continue
 
                     tx = offset_x + (c_idx * tile_size)
                     ty = offset_y + (r_idx * tile_size)
+                    if tx + tile_size < 0 or tx > screen_width or ty + tile_size < 0 or ty > screen_height:
+                        continue
 
                     if char in texture_cache:
                         path = texture_cache[char]
@@ -563,17 +756,34 @@ while running:
                         if cache_key not in loaded_tile_surfaces:
                             loaded_tile_surfaces[cache_key] = load_svg_surface(path, int(tile_size), int(tile_size))
                         surface = loaded_tile_surfaces[cache_key]
-                        screen.blit(surface, (tx, ty))
+                        if char in wintoken_refs:
+                            if (c_idx, r_idx) in collected_tokens:
+                                continue
+                            alpha, shake_x, shake_y = wintoken_look(active_character, c_idx, r_idx)
+                            surface.set_alpha(alpha)
+                            screen.blit(surface, (tx + shake_x, ty + shake_y))
+                        else:
+                            screen.blit(surface, (tx, ty))
                     else:
                         rect = pygame.Rect(tx, ty, tile_size, tile_size)
                         pygame.draw.rect(screen, (200, 50, 200), rect)
 
+            for char, c_idx, r_idx in big_blocks:
+                bx, by, bw, bh = block_rect(char, c_idx, r_idx)
+                surf_w = int(bw * tile_size)
+                surf_h = int(bh * tile_size)
+                cache_key = (char, surf_w, surf_h)
+                if cache_key not in loaded_tile_surfaces:
+                    loaded_tile_surfaces[cache_key] = load_svg_surface(texture_cache[char], surf_w, surf_h)
+                screen.blit(loaded_tile_surfaces[cache_key], (offset_x + bx * tile_size, offset_y + by * tile_size))
+
             keys_down = pygame.key.get_pressed()
             ctrl_held = pygame.key.get_mods() & pygame.KMOD_CTRL
+            can_move = not ctrl_held and not dialogue_box.active
             input_state = {
-                "left": not ctrl_held and (keys_down[pygame.K_LEFT] or keys_down[pygame.K_a]),
-                "right": not ctrl_held and (keys_down[pygame.K_RIGHT] or keys_down[pygame.K_d]),
-                "jump": keys_down[pygame.K_SPACE] or keys_down[pygame.K_UP] or keys_down[pygame.K_w]
+                "left": can_move and (keys_down[pygame.K_LEFT] or keys_down[pygame.K_a]),
+                "right": can_move and (keys_down[pygame.K_RIGHT] or keys_down[pygame.K_d]),
+                "jump": can_move and (keys_down[pygame.K_SPACE] or keys_down[pygame.K_UP] or keys_down[pygame.K_w])
             }
 
             for ch in level_characters:
@@ -586,13 +796,46 @@ while running:
                 foot_y = offset_y + (ch.y * tile_size)
                 draw_character(screen, ch, foot_x, foot_y, tile_size / 30.0)
 
+            if active_character:
+                collected_tokens.update(touching_tiles(active_character, grid, wintoken_refs))
+                if not dialogue_triggered and lvl.get("lines") and touching_tiles(active_character, grid, dialogue_refs):
+                    dialogue_triggered = True
+                    dialogue_box.start(lvl["lines"])
+
+            if not (active_character and touches_door(active_character, grid)):
+                door_timer = None
+            elif door_timer is None:
+                door_timer = DOOR_DELAY_FRAMES
+            else:
+                door_timer -= 1
+                if door_timer <= 0:
+                    got_token = bool(collected_tokens) or not level_has_wintoken(grid)
+                    if level_progress.get(current_level_index) != "green":
+                        level_progress[current_level_index] = "green" if got_token else "yellow"
+                    current_level_index = (current_level_index + 1) % len(parsed_levels)
+                    level_progress.setdefault(current_level_index, "reached")
+                    save_progress()
+
             title_surf = font_level_title.render(lvl["title"], True, (255, 255, 255))
             screen.blit(title_surf, title_surf.get_rect(bottomleft=(15, screen_height - 12)))
 
-            back_hint = font_small.render("Press ESC to return to menu | R to reset | TAB to switch char | CTRL+LEFT/RIGHT to change level", True, (255, 255, 255))
-            screen.blit(back_hint, (15, 15))
+            back_hint = font_small.render("Press ESC for level select | R to reset | TAB to switch char | CTRL+LEFT/RIGHT to change level", True, (255, 255, 255))
+            if dialogue_box.active:
+                dialogue_box.draw(screen)
+            else:
+                screen.blit(back_hint, (15, 15))
 
+            if flash_timer > 0:
+                flash = pygame.Surface((screen_width, screen_height))
+                flash.fill((255, 255, 255))
+                flash.set_alpha(int(255 * flash_timer / FLASH_FRAMES))
+                screen.blit(flash, (0, 0))
+                flash_timer -= 1
+
+    animation_tick += 1
     pygame.display.flip()
-    clock.tick(60)
+    frame_seconds = clock.tick(60) / 1000.0
+    if game_state == "playing":
+        time_spent += frame_seconds
 
 pygame.quit()

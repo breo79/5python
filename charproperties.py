@@ -15,6 +15,7 @@ character_properties = [
         "name": "Book",
         "width": "23",
         "height": "56",
+        "HitboxTrim": "5.2",
 
         "weight": "0.36",
         "CarriedObjectHeight": "31",
