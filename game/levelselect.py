@@ -83,7 +83,7 @@ class LevelSelectMenu:
 
     def build_overlay(self, load_svg_surface):
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        full_path = Path(__file__).resolve().parent / BORDER_IMG_PATH
+        full_path = Path(__file__).resolve().parent.parent / BORDER_IMG_PATH
         if full_path.exists():
             metal = pygame.image.load(str(full_path)).convert_alpha()
             overlay.blit(pygame.transform.smoothscale(metal, (self.width, self.height)), (0, 0))

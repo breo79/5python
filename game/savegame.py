@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SAVE_PATH = Path(__file__).resolve().parent / "assets" / "leveldata" / "saves" / "savefile.txt"
+SAVE_PATH = Path(__file__).resolve().parent.parent / "assets" / "leveldata" / "saves" / "savefile.txt"
 END_MARKER = "00000"
 
 STATE_KEYS = {
@@ -65,6 +65,14 @@ def load_save(path=SAVE_PATH):
         time_spent = 0.0
 
     return {"progress": progress, "time_spent": time_spent}
+
+
+def ensure_save_file(path=SAVE_PATH):
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+        return True
+    return False
 
 
 def has_save(path=SAVE_PATH):

@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
-import blockproperties
-import backgroundproperties
+from data import blockproperties
+from data import backgroundproperties
 
 
 DIALOGUE_LINE = re.compile(r"^(\d{2})([A-Z]) ?(.*)$")
@@ -32,7 +32,7 @@ def parse_entities(entity_lines):
     return spawns
 
 def parse_level():
-    BASE_DIR = Path(__file__).resolve().parent
+    BASE_DIR = Path(__file__).resolve().parent.parent
     file_path = BASE_DIR / "assets" / "leveldata" / "levels.txt"
 
     if not file_path.exists():

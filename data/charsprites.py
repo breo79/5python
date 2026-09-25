@@ -92,6 +92,10 @@ character_parts = {
             "air": [
                 {"sprite": "bent", "angle": -70, "front": True},
                 {"sprite": "bent", "flip_x": True, "angle": 70, "front": True}
+            ],
+            "carry": [
+                {"sprite": "curled", "angle": 72, "scale": 1.4, "shoulder": (26, 100), "front": True},
+                {"sprite": "curled", "angle": 80, "shoulder": (144, 100)}
             ]
         },
         "hips": [(60, 174), (102, 174)]
