@@ -25,6 +25,8 @@ clock = pygame.time.Clock()
 font_large = pygame.font.Font("assets/ui/fonts/arial.ttf", 24)
 font_small = pygame.font.Font("assets/ui/fonts/arial.ttf", 16)
 font_button = pygame.font.Font("assets/ui/fonts/arial.ttf", 30)
+font_level_title = pygame.font.Font("assets/ui/fonts/arial.ttf", 30)
+font_level_title.set_bold(True)
 
 multiline_text = "By Cary Huang\nMusic by Michael Huang\nPython Port by asdguiv"
 text_lines = multiline_text.split('\n')
@@ -440,6 +442,9 @@ while running:
             if game_state == "playing":
                 if event.key == pygame.K_ESCAPE:
                     game_state = "main_menu"
+                elif event.key in (pygame.K_LEFT, pygame.K_RIGHT) and event.mod & pygame.KMOD_CTRL and parsed_levels:
+                    step = 1 if event.key == pygame.K_RIGHT else -1
+                    current_level_index = (current_level_index + step) % len(parsed_levels)
                 elif event.key == pygame.K_r:
                     for ch in level_characters:
                         ch.reset()
@@ -564,9 +569,10 @@ while running:
                         pygame.draw.rect(screen, (200, 50, 200), rect)
 
             keys_down = pygame.key.get_pressed()
+            ctrl_held = pygame.key.get_mods() & pygame.KMOD_CTRL
             input_state = {
-                "left": keys_down[pygame.K_LEFT] or keys_down[pygame.K_a],
-                "right": keys_down[pygame.K_RIGHT] or keys_down[pygame.K_d],
+                "left": not ctrl_held and (keys_down[pygame.K_LEFT] or keys_down[pygame.K_a]),
+                "right": not ctrl_held and (keys_down[pygame.K_RIGHT] or keys_down[pygame.K_d]),
                 "jump": keys_down[pygame.K_SPACE] or keys_down[pygame.K_UP] or keys_down[pygame.K_w]
             }
 
@@ -580,11 +586,11 @@ while running:
                 foot_y = offset_y + (ch.y * tile_size)
                 draw_character(screen, ch, foot_x, foot_y, tile_size / 30.0)
 
-            title_surf = font_small.render(f"Level: {lvl['title']}", True, (255, 255, 255))
-            screen.blit(title_surf, (15, 15))
+            title_surf = font_level_title.render(lvl["title"], True, (255, 255, 255))
+            screen.blit(title_surf, title_surf.get_rect(bottomleft=(15, screen_height - 12)))
 
-            back_hint = font_small.render("Press ESC to return to menu | R to reset | TAB to switch char", True, (255, 255, 255))
-            screen.blit(back_hint, (15, screen_height - 30))
+            back_hint = font_small.render("Press ESC to return to menu | R to reset | TAB to switch char | CTRL+LEFT/RIGHT to change level", True, (255, 255, 255))
+            screen.blit(back_hint, (15, 15))
 
     pygame.display.flip()
     clock.tick(60)

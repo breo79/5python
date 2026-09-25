@@ -62,19 +62,13 @@ def parse_level():
             bg_id = 0
 
         grid_rows = []
-        unknown_block_found = False
         for _ in range(height):
             if i < len(lines):
-                row_str = lines[i]
-                if len(row_str) < width:
-                    row_str = row_str.ljust(width, '.')
-                grid_rows.append(row_str)
-                for char in row_str:
-                    if char not in known_refs:
-                        unknown_block_found = True
+                row_str = lines[i][:width].ljust(width, '.')
+                grid_rows.append("".join(char if char in known_refs else "." for char in row_str))
                 i += 1
             else:
-                unknown_block_found = True
+                grid_rows.append("." * width)
 
         entities = []
         dialogue = []
@@ -95,15 +89,14 @@ def parse_level():
                 bg_asset = bg["bgasset"]
                 break
 
-        if not unknown_block_found:
-            valid_levels.append({
-                "title": title,
-                "header": header,
-                "grid": grid_rows,
-                "entities": entities,
-                "spawns": parse_entities(entities),
-                "bg_asset": bg_asset,
-                "dialogue": dialogue
-            })
+        valid_levels.append({
+            "title": title,
+            "header": header,
+            "grid": grid_rows,
+            "entities": entities,
+            "spawns": parse_entities(entities),
+            "bg_asset": bg_asset,
+            "dialogue": dialogue
+        })
 
     return valid_levels
