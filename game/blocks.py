@@ -52,7 +52,7 @@ door_refs = {
     if block["blockid"] == "7"
 }
 
-CONVEYOR_SPEED = 1.0 / 60.0
+CONVEYOR_SPEED = 7.2 / 60.0
 
 conveyor_speeds = {}
 for block in blockproperties.block_sprites:
@@ -60,6 +60,48 @@ for block in blockproperties.block_sprites:
         conveyor_speeds[block["referential"]] = -CONVEYOR_SPEED
     elif block.get("blockname") == "ConveyorRight":
         conveyor_speeds[block["referential"]] = CONVEYOR_SPEED
+
+SPRING_BOOST_TILES = 7.5
+
+spring_refs = {
+    block["referential"]
+    for block in blockproperties.block_sprites
+    if block.get("blockname") == "PurpleSpringy"
+}
+
+toggle_blocks = {
+    block["referential"]: {
+        "group": block["togglegroup"],
+        "starts_on": str(block.get("startson", "true")).lower() == "true",
+        "on": block["blocktexture"],
+        "off": block.get("blocktextureoff", block["blocktexture"]),
+    }
+    for block in blockproperties.block_sprites
+    if block.get("togglegroup") and not block.get("leverhandle")
+}
+
+lever_blocks = {
+    block["referential"]: {"group": block["togglegroup"], "handle": block["leverhandle"]}
+    for block in blockproperties.block_sprites
+    if block.get("leverhandle")
+}
+
+toggle_state = {}
+
+def reset_toggles():
+    toggle_state.clear()
+
+def push_lever(group, direction):
+    toggle_state[group] = direction > 0
+
+def toggle_block_on(char):
+    info = toggle_blocks[char]
+    return info["starts_on"] != toggle_state.get(info["group"], False)
+
+def sides_of(char):
+    if char in toggle_blocks and not toggle_block_on(char):
+        return "2222"
+    return block_sides.get(char, "2222")
 
 def block_rect(char, col, row):
     w, h = block_sizes.get(char, (1.0, 1.0))

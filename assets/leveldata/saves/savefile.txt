@@ -1,6 +1,0 @@
-BeatenLevels ;
-BeatenLVLSnoWt 
-Unbeaten 1
-WinTokenAmount 0
-TimeSpentPlaying 0.0
-00000

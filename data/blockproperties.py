@@ -144,4 +144,69 @@ block_sprites = [
         "CollisionDataFourSided": "1111",
         "BlockSize": "1"
     },
+    {
+        "blockid": "18",
+        "blockname": "PurpleSpringy",
+        "referential": ";",
+        "blocktexture": "/assets/blocks/spring/b0013f0000.svg",
+        "blockanimation": "/assets/blocks/spring",
+        "CollisionDataFourSided": "1111",
+        "BlockSize": "1"
+    },
+    {
+        "blockid": "19",
+        "blockname": "DecourRockBottom1",
+        "referential": "X",
+        "blocktexture": "/assets/blocks/b0042.svg",
+        "CollisionDataFourSided": "1111",
+        "BlockSize": "1"
+    },
+    {
+        "blockid": "20",
+        "blockname": "DecourRockBottom2",
+        "referential": "Y",
+        "blocktexture": "/assets/blocks/b0044.svg",
+        "CollisionDataFourSided": "1111",
+        "BlockSize": "1"
+    },
+    {
+        "blockid": "21",
+        "blockname": "DecourDirtBlack",
+        "referential": "^",
+        "blocktexture": "/assets/blocks/b0048.svg",
+        "CollisionDataFourSided": "1111",
+        "BlockSize": "1"
+    },
+    {
+        "blockid": "22",
+        "blockname": "YellowToggleBlock",
+        "referential": "M",
+        "blocktexture": "/assets/blocks/yellow_toggleables/1/yellow_on.svg",
+        "blocktextureoff": "/assets/blocks/yellow_toggleables/1/yellow_off.svg",
+        "togglegroup": "yellow",
+        "startson": "true",
+        "CollisionDataFourSided": "1111",
+        "BlockSize": "1"
+    },
+    {
+        "blockid": "23",
+        "blockname": "YellowToggleBlockDark",
+        "referential": "N",
+        "blocktexture": "/assets/blocks/yellow_toggleables/2/darky_on.svg",
+        "blocktextureoff": "/assets/blocks/yellow_toggleables/2/darky_off.svg",
+        "togglegroup": "yellow",
+        "startson": "false",
+        "CollisionDataFourSided": "1111",
+        "BlockSize": "1"
+    },
+    {
+        "blockid": "24",
+        "blockname": "YellowLever",
+        "referential": "Q",
+        "blocktexture": "/assets/blocks/yellow_toggleables/yellow_switch/b0035leverbase.svg",
+        "leverhandle": "/assets/blocks/yellow_toggleables/yellow_switch/b00leverhandle.svg",
+        "togglegroup": "yellow",
+        "CollisionDataFourSided": "2222",
+        "BlockSize": "1"
+    },
 ]

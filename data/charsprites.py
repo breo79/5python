@@ -12,7 +12,7 @@ character_sprites = [
     {
         "charid": "2",
         "charname": "Ice Cube",
-        "icecubeSprite_StillLimbless": "/assets/bodyparts/bubbster/e0002.svg"
+        "icecubeSprite_StillLimbless": "/assets/bodyparts/ice cube/e0002.svg"
     },
     {
         "charid": "3",
@@ -67,6 +67,8 @@ LEG_LENGTH = 33
 
 eye_sprite = {"path": "/assets/bodyparts/limbs/bp0000.svg", "size": (19, 44), "anchor": (9.7, 21.8)}
 mouth_sprite = {"path": "/assets/bodyparts/limbs/bp0001.svg", "size": (57, 8), "anchor": (28.5, 4)}
+dead_mouth_sprite = {"path": "/assets/bodyparts/faces/mouthfrownopen.svg", "size": (54, 65), "anchor": (27, 32)}
+dead_eye_sprite = {"path": "/assets/bodyparts/faces/bp0040.svg", "size": (28, 68), "anchor": (14, 34)}
 arm_sprites = {
     "straight": {"path": "/assets/bodyparts/limbs/bp0002.svg", "size": (12, 74), "anchor": (6, 37)},
     "bent": {"path": "/assets/bodyparts/limbs/bp0003.svg", "size": (26, 76), "anchor": (13, 37)},
@@ -92,6 +94,10 @@ character_parts = {
             "air": [
                 {"sprite": "bent", "angle": -70, "front": True},
                 {"sprite": "bent", "flip_x": True, "angle": 70, "front": True}
+            ],
+            "dead": [
+                {"sprite": "straight", "angle": -150, "shoulder": (8, 88), "front": True},
+                {"sprite": "straight", "angle": 150, "shoulder": (152, 88), "front": True}
             ],
             "carry": [
                 {"sprite": "curled", "angle": 72, "scale": 1.4, "shoulder": (26, 100), "front": True},

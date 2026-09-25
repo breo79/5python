@@ -29,6 +29,22 @@ object_properties = [
         "width": "25",
         "throwdistance": "2.5",
         "pickupable": "true"
+    },
+    {
+        "entityid": "46",
+        "objectname": "Spike Ball",
+        "objecttexture": "/assets/objects/e0046.svg",
+        "height": "50",
+        "width": "50",
+        "sides": "5555"
+    },
+    {
+        "entityid": "44",
+        "objectname": "Purple Facer",
+        "objecttexture": "/assets/objects/e0044.svg",
+        "height": "45",
+        "width": "45",
+        "sides": "5555"
     }
 ]
 

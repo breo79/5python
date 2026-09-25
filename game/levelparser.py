@@ -41,6 +41,9 @@ def parse_level():
     with open(file_path, "r", encoding="utf-8") as file:
         lines = [line.rstrip('\r\n') for line in file.readlines()]
 
+    return parse_level_lines(lines)
+
+def parse_level_lines(lines):
     known_refs = {block["referential"] for block in blockproperties.block_sprites}
     known_refs.add(".")
 

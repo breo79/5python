@@ -1,7 +1,8 @@
 import math
+import random
 from data import charsprites
-from game.assets import svg_intrinsic_size
-from game.blocks import block_sides, SOLID_CODES, SIDE_TOP, SIDE_BOTTOM, SIDE_LEFT, SIDE_RIGHT, conveyor_speeds
+from game.assets import svg_intrinsic_size, ROOT
+from game.blocks import SOLID_CODES, SIDE_TOP, SIDE_BOTTOM, SIDE_LEFT, SIDE_RIGHT, conveyor_speeds, spring_refs, SPRING_BOOST_TILES, sides_of
 
 PLAYER_CHARID = "1"
 PICKUP_REACH = 0.2
@@ -9,6 +10,11 @@ CARRY_SLOWDOWN = 0.5
 THROW_SPEED_X = 0.18
 BOOK_UNIT_PX = 30
 CARRY_FRONT_OFFSET_PX = 20
+BODY_GRAVITY = 0.015
+LEDGE_CODES = ("1", "3", "5")
+DEATH_FLASH_FRAMES = 60
+DEATH_FLASH_RUN = (1, 5)
+SPRING_SPEED = (BODY_GRAVITY + math.sqrt(BODY_GRAVITY ** 2 + 8.0 * BODY_GRAVITY * SPRING_BOOST_TILES)) / 2.0
 
 EDGE_EPS = 0.001
 
@@ -16,7 +22,10 @@ class Body:
     pushable = False
     ignoring = None
     belt = 0.0
-    gravity = 0.015
+    sprung = ()
+    ledge_offset = 0.0
+    deadly = False
+    gravity = BODY_GRAVITY
     terminal_velocity = 0.5
 
     def left(self):
@@ -37,7 +46,7 @@ class Body:
     def side_code(self, grid, col, row, side):
         if row < 0 or row >= len(grid) or col < 0 or col >= len(grid[0]):
             return "2"
-        return block_sides.get(grid[row][col], "2222")[side]
+        return sides_of(grid[row][col])[side]
 
     def hits_side(self, grid, col, row, side):
         code = self.side_code(grid, col, row, side)
@@ -79,7 +88,7 @@ class Body:
 
     def collide_bodies_y(self, bodies, prev_bottom):
         for other in bodies:
-            if self.ignores(other) or not self.overlaps_x(other):
+            if other.deadly or self.ignores(other) or not self.overlaps_x(other):
                 continue
             other_top = other.top()
             if self.vy >= 0 and prev_bottom <= other_top + EDGE_EPS and self.y > other_top:
@@ -87,8 +96,19 @@ class Body:
                 self.vy = 0.0
                 self.on_ground = True
 
+    def find_ledge_offset(self, grid, start_col, end_col, row):
+        supported = [c for c in range(start_col, end_col + 1) if self.side_code(grid, c, row, SIDE_TOP) in LEDGE_CODES]
+        center_col = int(math.floor(self.x))
+        if not supported or center_col in supported:
+            return 0.0
+        if supported[0] > center_col:
+            return supported[0] - self.x
+        return supported[-1] + 1 - self.x
+
     def move(self, grid, bodies=()):
         self.touched_deadly = False
+        self.sprung = []
+        self.ledge_offset = 0.0
         self.vy += self.gravity
         if self.vy > self.terminal_velocity:
             self.vy = self.terminal_velocity
@@ -118,9 +138,17 @@ class Body:
                     self.y = float(end_row)
                     self.vy = 0.0
                     self.on_ground = True
-                    for belt_col in range(start_col, end_col + 1):
-                        if 0 <= end_row < len(grid) and 0 <= belt_col < len(grid[0]):
-                            self.belt = conveyor_speeds.get(grid[end_row][belt_col], 0.0) or self.belt
+                    for under_col in range(start_col, end_col + 1):
+                        if 0 <= end_row < len(grid) and 0 <= under_col < len(grid[0]):
+                            under = grid[end_row][under_col]
+                            self.belt = conveyor_speeds.get(under, 0.0) or self.belt
+                            if under in spring_refs:
+                                self.sprung.append((under_col, end_row))
+                    if self.sprung:
+                        self.vy = -SPRING_SPEED
+                        self.on_ground = False
+                    else:
+                        self.ledge_offset = self.find_ledge_offset(grid, start_col, end_col, end_row)
                     break
         elif self.vy < 0:
             for c in range(start_col, end_col + 1):
@@ -138,7 +166,13 @@ class CharacterEntity(Body):
         self.name = self.props.get("name", "Unknown")
 
         self.sprite_path = charsprites.get_limbless_sprite(self.charid)
-        self.body_svg_w, self.body_svg_h = svg_intrinsic_size(self.sprite_path) if self.sprite_path else (1.0, 1.0)
+        if self.sprite_path and not (ROOT / self.sprite_path.lstrip("/")).exists():
+            self.sprite_path = None
+        if self.sprite_path:
+            self.body_svg_w, self.body_svg_h = svg_intrinsic_size(self.sprite_path)
+        else:
+            self.body_svg_w = float(self.props.get("width", 28)) * 2.0
+            self.body_svg_h = float(self.props.get("height", 45.4))
         self.parts = charsprites.get_character_parts(self.charid)
         self.hips = self.parts.get("hips", [
             (self.body_svg_w * 0.4, self.body_svg_h),
@@ -180,6 +214,9 @@ class CharacterEntity(Body):
         self.facing_right = True
         self.walk_phase = 0.0
         self.died = False
+        self.dead = False
+        self.death_frame = 0
+        self.death_flashes = []
 
     def reset(self):
         self.x = self.spawn_x
@@ -188,6 +225,7 @@ class CharacterEntity(Body):
         self.vy = 0.0
         self.on_ground = False
         self.walk_phase = 0.0
+        self.dead = False
 
     def pose(self):
         if not self.on_ground:
@@ -263,6 +301,8 @@ class CharacterEntity(Body):
             obj.vy = 0.0
 
     def update(self, keys, grid, bodies=()):
+        if self.dead:
+            return
         move_dir = 0
         if keys.get("left"):
             move_dir -= 1
@@ -295,15 +335,48 @@ class CharacterEntity(Body):
             else:
                 self.walk_phase = 0.0
 
+        if any(other.deadly and self.overlaps(other) for other in bodies):
+            self.touched_deadly = True
+
         if self.touched_deadly or self.y > len(grid) + 3:
-            self.reset()
-            self.died = True
+            self.die()
+
+    def die(self):
+        self.vx = 0.0
+        self.vy = 0.0
+        self.on_ground = False
+        self.dead = True
+        self.died = True
+        self.death_frame = 0
+        self.death_flashes = []
+        visible = True
+        while len(self.death_flashes) < DEATH_FLASH_FRAMES:
+            self.death_flashes += [visible] * random.randint(*DEATH_FLASH_RUN)
+            visible = not visible
+
+    def death_visible(self):
+        frame = self.death_frame
+        self.death_frame += 1
+        return frame < DEATH_FLASH_FRAMES and self.death_flashes[frame]
+
+MOTION_STATES = ("03", "04")
+MOTION_DIRECTIONS = {"0": (0, -1), "1": (0, 1), "2": (-1, 0), "3": (1, 0)}
+
+def parse_motion(extra):
+    parts = (extra or "").split()
+    if len(parts) < 2 or parts[0] not in MOTION_STATES:
+        return 1, ""
+    code = parts[1]
+    path = "".join(ch for ch in code[2:] if ch in MOTION_DIRECTIONS)
+    if not code[:2].isdigit() or int(code[:2]) <= 0 or not path:
+        return 1, ""
+    return int(code[:2]), path
 
 class GameObject(Body):
     pushable = True
     carrier = None
 
-    def __init__(self, entityid, x, y, props):
+    def __init__(self, entityid, x, y, props, extra=None):
         self.entityid = str(entityid)
         self.props = props
         self.name = props.get("objectname", "Object")
@@ -317,6 +390,9 @@ class GameObject(Body):
         self.pickupable = str(props.get("pickupable", "false")).lower() == "true"
         self.throw_distance = float(props.get("throwdistance", 2.0)) * BOOK_UNIT_PX / 30.0
         self.flipped = False
+        self.sides = (str(props.get("sides", "1111")) + "1111")[:4]
+        self.deadly = "5" in self.sides
+        self.path_speed, self.path = parse_motion(extra)
         self.spawn_x = float(x)
         self.spawn_y = float(y)
         self.reset()
@@ -331,6 +407,7 @@ class GameObject(Body):
         self.carrier = None
         self.ignoring = None
         self.thrown = False
+        self.path_tick = 0
 
     def follow(self, carrier):
         facing = 1 if carrier.facing_right else -1
@@ -341,8 +418,18 @@ class GameObject(Body):
         self.vy = 0.0
         self.on_ground = False
 
+    def follow_path(self):
+        direction = self.path[(self.path_tick // self.path_speed) % len(self.path)]
+        dx, dy = MOTION_DIRECTIONS[direction]
+        self.x += dx / self.path_speed
+        self.y += dy / self.path_speed
+        self.path_tick += 1
+
     def update(self, grid, bodies=()):
         if self.gone or self.carrier is not None:
+            return
+        if self.path:
+            self.follow_path()
             return
         if self.on_ground:
             self.vx *= self.friction

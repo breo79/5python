@@ -1,4 +1,5 @@
 import pygame
+from game.render import character_portrait
 
 FONT_PATH = "assets/ui/fonts/arial.ttf"
 BOX_PATH = "assets/ui/dialogue/dia.svg"
@@ -12,6 +13,8 @@ TEXT_WIDTH = 370
 FONT_SIZE = 19
 LINE_HEIGHT = 21
 EASE_FRAMES = 27
+ICON_SIZE = 84
+ICON_POS = (8, 8)
 
 
 def ease_out_cubic(t):
@@ -42,13 +45,16 @@ class DialogueBox:
         self.index = 0
         self.frame = 0
         self.rendered = []
+        self.speakers = []
+        self.icon = None
 
     @property
     def active(self):
         return self.index < len(self.lines)
 
-    def start(self, lines):
+    def start(self, lines, speakers=()):
         self.lines = list(lines)
+        self.speakers = list(speakers)
         self.index = 0
         self.show_current()
 
@@ -65,7 +71,10 @@ class DialogueBox:
     def show_current(self):
         self.frame = 0
         if self.active:
-            text = self.lines[self.index]["text"]
+            line = self.lines[self.index]
+            text = line["text"]
+            speaker = int(line["speaker"]) if line["speaker"].isdigit() else -1
+            self.icon = character_portrait(self.speakers[speaker], ICON_SIZE) if 0 <= speaker < len(self.speakers) else None
             self.rendered = [self.font.render(line, True, (0, 0, 0)) for line in wrap_text(self.font, text, TEXT_WIDTH)]
 
     def draw(self, screen):
@@ -76,6 +85,8 @@ class DialogueBox:
 
         panel = pygame.Surface((BOX_W, BOX_H), pygame.SRCALPHA)
         panel.blit(self.box, (0, 0))
+        if self.icon is not None:
+            panel.blit(self.icon, ICON_POS)
         for i, line_surf in enumerate(self.rendered):
             panel.blit(line_surf, (TEXT_X, TEXT_Y + i * LINE_HEIGHT))
         center = (self.screen_w // 2, BOX_Y + BOX_H // 2)
