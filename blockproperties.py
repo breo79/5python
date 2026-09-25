@@ -53,9 +53,9 @@ block_sprites = [
     },
     {
         "blockid": "7",
-        "blockname": "poop again",
+        "blockname": "EndingDoor",
         "referential": "4",
-        "blocktexture": "/assets/blocks/b0009.svg",
+        "blocktexture": "/assets/blocks/door_ending.svg",
         "CollisionDataFourSided": "2222"
     },
     {

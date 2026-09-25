@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Graphic version="2.0" viewHeight="540" viewWidth="960" ATE:version="1.0.0" flm:version="1.0.0" d:id="1" d:using="" xmlns="http://ns.adobe.com/fxg/2008" xmlns:ATE="http://ns.adobe.com/ate/2009" xmlns:d="http://ns.adobe.com/fxg/2008/dt" xmlns:flm="http://ns.adobe.com/flame/2008">
+  <Library>
+    <Definition name="thing_bg" flm:originalName="thing bg">
+      <Group flm:addedGroup="true">
+        <Group blendMode="normal" d:type="layer" d:userLabel="Layer 1">
+          <Path flm:isDrawingObject="false" data="M60 0 60 120 0 120 0 0Z">
+            <fill>
+              <SolidColor color="#505050"/>
+            </fill>
+          </Path>
+        </Group>
+        <Group blendMode="normal" d:type="layer" d:userLabel="Layer 2"/>
+      </Group>
+    </Definition>
+  </Library>
+  <Group blendMode="normal" d:type="layer" d:userLabel="Selected Items">
+    <thing_bg x="-30" y="-60"/>
+  </Group>
+  <Private>
+      <xfl:PrivateElement d:ref="#1" xmlns:xfl="http://ns.adobe.com/xfl/2008/">
+        <xfl:publishSettings xfl:source=""/>
+        <xfl:mobileSettings xfl:source=""/>
+        <xfl:as3ExportItems/>
+      </xfl:PrivateElement>
+    </Private>
+  </Graphic>
